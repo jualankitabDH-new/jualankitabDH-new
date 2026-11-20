@@ -9,7 +9,9 @@
 <title>Jualan Kitab Darul Hikmah</title>
 <base target="_top">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
+<noscript><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap"></noscript>
 <style>
 [hidden]{display:none!important}
 html{color-scheme:light}
@@ -42,6 +44,7 @@ h1{font-family:var(--f-display);font-weight:700;font-size:1.5rem;margin:0;letter
 .sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted);flex:none}
 .sync.on::before{background:var(--accent)}
 .sync.off{color:var(--neg)} .sync.off::before{background:var(--neg)}
+body.loading .summary,body.loading table{opacity:.45}
 .monthbar{display:flex;align-items:center;gap:6px}
 .monthbar .label{font-family:var(--f-display);font-weight:600;font-size:1.05rem;min-width:9.5em;text-align:center}
 button{font:inherit;cursor:pointer}
@@ -330,7 +333,7 @@ ul.rep-list{list-style:none;padding-left:0}
   let cur={y:now.getFullYear(),m:now.getMonth()+1};
   const key=()=>cur.y+"-"+pad(cur.m);
 
-  let books=[],orders=[],stockIn=[];
+  let books=[],orders=[],stockIn=[],loaded=false,failed=false;
   let db=null,myId=null,userApi=null,canWrite=true,names={};
 
   function el(tag,cls,text){const e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
@@ -352,7 +355,7 @@ ul.rep-list{list-style:none;padding-left:0}
   function fillSelects(){
     for(const id of["oBook","kBook"]){
       const s=$(id),prev=s.value;s.textContent="";
-      if(!books.length){s.appendChild(el("option","", "Tiada kitab lagi"));continue}
+      if(!books.length){s.appendChild(el("option","", loaded?"Tiada kitab lagi":failed?"Data belum dimuatkan":"Memuatkan…"));continue}
       for(const b of books){const o=el("option","",b.name);o.value=b.id;s.appendChild(o)}
       if(books.some(b=>b.id===prev))s.value=prev;
     }
@@ -380,7 +383,7 @@ ul.rep-list{list-style:none;padding-left:0}
 
     // orders table
     const ob=$("orderRows");ob.textContent="";
-    if(!mOrders.length){const tr=el("tr");const td=el("td","empty","Belum ada order untuk bulan ini.");td.colSpan=9;tr.appendChild(td);ob.appendChild(tr)}
+    if(!mOrders.length){const tr=el("tr");const td=el("td","empty",loaded?"Belum ada order untuk bulan ini.":failed?"Data belum dimuatkan.":"Memuatkan data…");td.colSpan=9;tr.appendChild(td);ob.appendChild(tr)}
     for(const o of mOrders){
       const tr=el("tr");
       tr.append(el("td","date",fmtDate(o.date)),el("td","",o.channel||""),el("td","",o.kitabName||""),el("td","n",o.qty),el("td","n",n2(o.price)),el("td","n",n2(o.qty*o.price)),el("td","muted",o.orderNo||""),el("td","muted",who(o.by)));
@@ -629,11 +632,11 @@ ul.rep-list{list-style:none;padding-left:0}
       document.querySelector(".summary").before(n);
       return;
     }
-    $("sync").textContent=canWrite?"Disegerak dengan Google Sheet":"Disegerak · anda hanya boleh lihat";$("sync").className="sync on";
+    $("sync").textContent="Memuatkan data…";$("sync").className="sync";document.body.classList.add("loading");
     if(!canWrite)document.body.classList.add("ro");
     render();
-    const err=()=>{$("status").textContent="Data tidak dapat dimuatkan sekarang. Cuba muat semula halaman."};
-    db.collection("kitab").onSnapshot(q=>{books=q.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.no||999)-(b.no||999)||a.name.localeCompare(b.name));fillSelects();render()},err);
+    const err=()=>{if(!loaded){failed=true;fillSelects();render();$("sync").textContent="Tidak disegerak";$("sync").className="sync off";document.body.classList.remove("loading")}$("status").textContent="Data tidak dapat dimuatkan sekarang. Cuba muat semula halaman."};
+    db.collection("kitab").onSnapshot(q=>{books=q.docs.map(d=>({id:d.id,...d.data()})).sort((a,b)=>(a.no||999)-(b.no||999)||a.name.localeCompare(b.name));if(!loaded){loaded=true;document.body.classList.remove("loading");$("status").textContent="";$("sync").textContent=canWrite?"Disegerak dengan Google Sheet":"Disegerak · anda hanya boleh lihat";$("sync").className="sync on"}fillSelects();render()},err);
     db.collection("order").onSnapshot(q=>{orders=q.docs.map(d=>({id:d.id,...d.data()}));render()},err);
     db.collection("stokmasuk").onSnapshot(q=>{stockIn=q.docs.map(d=>({id:d.id,...d.data()}));render()},err);
   })();
